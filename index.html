@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChemLab — Interactive Molecular Bonding Simulator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        lab: {
+                            bg: '#0f172a',
+                            panel: '#1e293b',
+                            border: '#334155',
+                            accent: '#38bdf8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Lab Grid Background & Scrollbars */
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .lab-grid {
+            background-color: #0b1120;
+            background-image: 
+                linear-gradient(to right, rgba(51, 65, 85, 0.25) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(51, 65, 85, 0.25) 1px, transparent 1px),
+                radial-gradient(circle at center, rgba(56, 189, 248, 0.05) 0%, transparent 70%);
+            background-size: 32px 32px, 32px 32px, 100% 100%;
+        }
+
+        /* Custom subtle scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Atom Pulse & Glow Effects */
+        @keyframes pulseRing {
+            0% { transform: scale(0.95); opacity: 0.7; }
+            50% { transform: scale(1.08); opacity: 0.3; }
+            100% { transform: scale(0.95); opacity: 0.7; }
+        }
+        .valid-target-ring {
+            animation: pulseRing 1.5s infinite ease-in-out;
+        }
+
+        @keyframes bondRearrangePulse {
+            0% { stroke-opacity: 0.25; stroke-width: 7; }
+            50% { stroke-opacity: 1; stroke-width: 4.5; }
+            100% { stroke-opacity: 0.95; stroke-width: 3.5; }
+        }
+        .rearranged-bond-pulse {
+            animation: bondRearrangePulse 0.75s ease-out;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+
+    <!-- Top Navigation & Toolbar -->
+    <header class="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 z-20 shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                <!-- Molecule Icon SVG -->
+                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="19" cy="5" r="2" />
+                    <circle cx="5" cy="19" r="2" />
+                    <circle cx="19" cy="19" r="2" />
+                    <path d="M14.2 9.8L17.5 6.5M9.8 14.2L6.5 17.5M14.2 14.2L17.5 17.5" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="font-bold text-base sm:text-lg tracking-tight text-white flex items-center gap-2">
+                    ChemLab <span class="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">Z = 1–20</span>
+                </h1>
+            </div>
+        </div>
+
+        <!-- Quick-Load Presets -->
+        <div class="hidden md:flex items-center gap-1.5 bg-slate-800/80 p-1 rounded-xl border border-slate-700/70">
+            <span class="text-xs text-slate-400 px-2 font-medium">Examples:</span>
+            <button onclick="loadPreset('H2O')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-slate-200 transition">H₂O</button>
+            <button onclick="loadPreset('NaCl')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-slate-200 transition">NaCl</button>
+            <button onclick="loadPreset('O2')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-sky-300 transition" title="Automatic Double Bond">O₂</button>
+            <button onclick="loadPreset('N2')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-indigo-300 transition" title="Automatic Triple Bond">N₂</button>
+            <button onclick="loadPreset('CO2')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-sky-300 transition" title="Double Bonds">CO₂</button>
+            <button onclick="loadPreset('HCN')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-indigo-300 transition" title="Single + Triple Bond">HCN</button>
+            <button onclick="loadPreset('C2H2')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-indigo-300 transition" title="Triple Bond">C₂H₂</button>
+            <button onclick="loadPreset('CaCl2')" class="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-700 text-amber-300 transition">CaCl₂</button>
+        </div>
+
+        <!-- Workspace Actions -->
+        <div class="flex items-center gap-2">
+            <!-- Mobile Preset Selector -->
+            <select id="mobilePresetSelect" onchange="if(this.value) { loadPreset(this.value); this.value=''; }" class="md:hidden bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-lg px-2 py-1.5 outline-none">
+                <option value="">Presets...</option>
+                <option value="H2O">Water (H₂O)</option>
+                <option value="NaCl">Salt (NaCl)</option>
+                <option value="O2">Oxygen Gas (O₂ — Double)</option>
+                <option value="N2">Nitrogen Gas (N₂ — Triple)</option>
+                <option value="CO2">Carbon Dioxide (CO₂ — Double)</option>
+                <option value="HCN">Hydrogen Cyanide (HCN — Triple)</option>
+                <option value="C2H2">Acetylene (C₂H₂ — Triple)</option>
+                <option value="CaCl2">Calcium Chloride (CaCl₂)</option>
+            </select>
+
+            <button id="toggleElectronsBtn" onclick="toggleValenceDots()" class="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 ring-2 ring-amber-400/50" title="Toggle Lone Pair & Shared Electron Dots">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span class="hidden sm:inline">Electron Pairs</span>
+            </button>
+
+            <button id="undoBtn" onclick="undoLastAction()" disabled class="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-200 border border-slate-700 transition flex items-center gap-1.5" title="Undo last action">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                <span class="hidden sm:inline">Undo</span>
+            </button>
+
+            <button onclick="clearWorkspace()" class="px-3 py-1.5 rounded-xl text-xs font-medium bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Clear</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+        <!-- Left Sidebar: Element Palette (17 Reactive Elements from Z=1..20) -->
+        <aside class="w-full lg:w-80 bg-slate-900/95 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col shrink-0 z-10 max-h-[34vh] lg:max-h-full">
+            <div class="p-3 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Reactive Elements</h2>
+                    <p class="text-[11px] text-slate-400">Drag or tap an element to add</p>
+                </div>
+                <!-- Legend Pills -->
+                <div class="flex gap-1.5 text-[10px] font-medium">
+                    <span class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">Metal</span>
+                    <span class="px-2 py-0.5 rounded-md bg-teal-500/15 text-teal-300 border border-teal-500/30">Metalloid</span>
+                    <span class="px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-300 border border-sky-500/30">Non-metal</span>
+                </div>
+            </div>
+
+            <!-- Scrollable Grid of 17 Elements -->
+            <div id="elementPalette" class="p-3 grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-3 gap-2 overflow-y-auto">
+                <!-- Populated dynamically via JS -->
+            </div>
+
+            <!-- Selected Element Mini-Card Info (Desktop) -->
+            <div id="elementDetailCard" class="hidden lg:block mt-auto p-3.5 bg-slate-950/60 border-t border-slate-800">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-semibold text-slate-300" id="detailName">Hover an element</span>
+                    <span class="text-[11px] font-mono text-slate-400" id="detailZ">Z = --</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-[11px] mt-2">
+                    <div class="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <span class="text-slate-400 block">Electronegativity</span>
+                        <span class="font-mono font-bold text-sky-400 text-xs" id="detailEN">--</span>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <span class="text-slate-400 block">Valence / Capacity</span>
+                        <span class="font-mono font-bold text-emerald-400 text-xs" id="detailValence">--</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center Interactive Lab Canvas -->
+        <main id="canvasContainer" class="flex-1 relative lab-grid overflow-hidden cursor-crosshair">
+            <!-- SVG Layer for Bonds & Interactive Drag-to-Bond Line -->
+            <svg id="bondLayer" class="absolute inset-0 w-full h-full pointer-events-auto z-0"></svg>
+
+            <!-- HTML Layer for Atom Nodes -->
+            <div id="atomLayer" class="absolute inset-0 w-full h-full pointer-events-none z-10"></div>
+
+            <!-- Empty State Hint -->
+            <div id="emptyStateHint" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-6 text-center transition-opacity duration-300">
+                <div class="max-w-md bg-slate-900/80 backdrop-blur-md border border-slate-700/70 p-6 rounded-2xl shadow-2xl">
+                    <div class="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-bold text-white mb-1">Build Your First Molecule</h3>
+                    <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                        Drag elements from the left palette onto this lab bench. Bring two atoms close together (or drag between them) to automatically form <span class="text-sky-400 font-semibold">Covalent</span> or <span class="text-amber-400 font-semibold">Ionic</span> bonds!
+                    </p>
+                    <div class="flex flex-wrap justify-center gap-2 text-[11px] text-slate-400">
+                        <span class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">Drag near atom = Bond</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">Add H to C=O → C–O–H</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">Click bond = Cycle/Break</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toast Notification Banner -->
+            <div id="toastBanner" class="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2">
+                <div id="toastContent" class="px-4 py-2 rounded-full bg-slate-900/95 border border-slate-700 shadow-xl text-xs font-medium text-white flex items-center gap-2 backdrop-blur-md">
+                    <span id="toastDot" class="w-2 h-2 rounded-full bg-sky-400"></span>
+                    <span id="toastText">Bond formed!</span>
+                </div>
+            </div>
+
+            <!-- Bottom Left Bond Legend Overlay -->
+            <div class="absolute bottom-4 left-4 z-20 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl p-2.5 text-[11px] text-slate-300 flex flex-wrap gap-3 shadow-lg pointer-events-none">
+                <div class="flex items-center gap-1.5">
+                    <svg width="24" height="10"><line x1="2" y1="5" x2="22" y2="5" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/></svg>
+                    <span>Single (2e⁻)</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <svg width="24" height="12"><line x1="2" y1="3.5" x2="22" y2="3.5" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="8.5" x2="22" y2="8.5" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span class="text-sky-300 font-medium">Double (4e⁻)</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <svg width="24" height="14"><line x1="2" y1="2.5" x2="22" y2="2.5" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round"/><line x1="2" y1="7" x2="22" y2="7" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round"/><line x1="2" y1="11.5" x2="22" y2="11.5" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    <span class="text-indigo-300 font-medium">Triple (6e⁻)</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <svg width="24" height="10"><line x1="2" y1="5" x2="22" y2="5" stroke="#fbbf24" stroke-width="2" stroke-dasharray="3,4" stroke-opacity="0.7"/></svg>
+                    <span>Ionic</span>
+                </div>
+            </div>
+
+            <!-- Bottom Right Trash Dropzone -->
+            <div id="trashZone" class="absolute bottom-4 right-4 z-20 w-12 h-12 rounded-2xl bg-slate-900/90 border border-slate-700/80 flex items-center justify-center text-slate-400 transition-all duration-200 shadow-lg" title="Drag an atom here to delete it">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </div>
+        </main>
+
+        <!-- Right Sidebar: Live Molecule Inspector -->
+        <aside class="w-full lg:w-80 bg-slate-900/95 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col shrink-0 z-10 max-h-[32vh] lg:max-h-full overflow-y-auto">
+            <div class="p-3.5 border-b border-slate-800 flex items-center justify-between">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Molecule Inspector
+                </h2>
+                <span id="stabilityBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Empty</span>
+            </div>
+
+            <div class="p-4 space-y-4">
+                <!-- Formula & Common Name Card -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center relative overflow-hidden">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Chemical Formula</span>
+                    <div id="formulaDisplay" class="text-2xl sm:text-3xl font-mono font-bold text-white tracking-wide min-h-[36px] flex items-center justify-center">
+                        —
+                    </div>
+                    <div id="moleculeNameDisplay" class="text-xs text-sky-400 font-medium mt-1">
+                        Place atoms to begin
+                    </div>
+                </div>
+
+                <!-- Bond Summary Stats -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div class="bg-slate-800/50 border border-slate-700/60 rounded-xl p-2.5">
+                        <span class="text-[10px] text-slate-400 block">Covalent Bonds</span>
+                        <span id="covalentCount" class="text-lg font-mono font-bold text-sky-400">0</span>
+                    </div>
+                    <div class="bg-slate-800/50 border border-slate-700/60 rounded-xl p-2.5">
+                        <span class="text-[10px] text-slate-400 block">Ionic Bonds</span>
+                        <span id="ionicCount" class="text-lg font-mono font-bold text-amber-400">0</span>
+                    </div>
+                </div>
+
+                <!-- VSEPR Molecular Geometry Card -->
+                <div id="vseprCard" class="bg-indigo-950/35 border border-indigo-500/30 rounded-xl p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 22 19 2 19" />
+                            </svg>
+                            VSEPR Geometry
+                        </span>
+                        <span id="vseprNotation" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">—</span>
+                    </div>
+                    <div class="flex items-baseline justify-between">
+                        <span id="vseprShapeName" class="text-sm font-bold text-white">No central atom</span>
+                        <span id="vseprBondAngle" class="text-xs font-mono font-bold text-emerald-400">—</span>
+                    </div>
+                    <p id="vseprDetails" class="text-[11px] text-slate-300 leading-snug">
+                        Connect 2+ atoms around a central atom to analyze electron domains & bond angles.
+                    </p>
+                    <button id="arrangeVseprBtn" onclick="arrangeByVSEPR()" disabled class="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-indigo-500/25 hover:bg-indigo-500/40 disabled:opacity-40 disabled:pointer-events-none text-indigo-200 border border-indigo-400/40 transition flex items-center justify-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                        <span>Snap to VSEPR Angles</span>
+                    </button>
+                </div>
+
+                <!-- Educational Explanation Box -->
+                <div class="bg-slate-800/40 border border-slate-700/60 rounded-xl p-3">
+                    <h3 class="text-xs font-semibold text-slate-200 mb-1.5 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Bonding Analysis
+                    </h3>
+                    <p id="educationalNote" class="text-xs text-slate-300 leading-relaxed">
+                        Drag atoms from the periodic palette onto the lab bench. Metals transfer electrons (+), while non-metals share electrons. Connecting an atom to a saturated double (=) or triple (≡) bond automatically opens the multiple bond!
+                    </p>
+                </div>
+
+                <!-- Atom Valence Checklist -->
+                <div>
+                    <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Octet / Duet Shell Status</h3>
+                    <div id="atomStatusList" class="space-y-1.5 text-xs">
+                        <p class="text-slate-500 italic text-[11px]">No atoms on workbench.</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * 1. PERIODIC TABLE DATA (First 20 Elements, excluding Noble Gases He, Ne, Ar)
+         * ============================================================================
+         */
+        const ELEMENTS = [
+            { z: 1,  symbol: 'H',  name: 'Hydrogen',   category: 'nonmetal',  en: 2.20, valence: 1, targetShell: 2, maxBonds: 1, role: 'nonmetal' },
+            { z: 3,  symbol: 'Li', name: 'Lithium',    category: 'metal',     en: 0.98, valence: 1, targetShell: 2, maxBonds: 1, role: 'metal' },
+            { z: 4,  symbol: 'Be', name: 'Beryllium',  category: 'metal',     en: 1.57, valence: 2, targetShell: 4, maxBonds: 2, role: 'metal' },
+            { z: 5,  symbol: 'B',  name: 'Boron',      category: 'metalloid', en: 2.04, valence: 3, targetShell: 6, maxBonds: 3, role: 'nonmetal' },
+            { z: 6,  symbol: 'C',  name: 'Carbon',     category: 'nonmetal',  en: 2.55, valence: 4, targetShell: 8, maxBonds: 4, role: 'nonmetal' },
+            { z: 7,  symbol: 'N',  name: 'Nitrogen',   category: 'nonmetal',  en: 3.04, valence: 5, targetShell: 8, maxBonds: 3, role: 'nonmetal' },
+            { z: 8,  symbol: 'O',  name: 'Oxygen',     category: 'nonmetal',  en: 3.44, valence: 6, targetShell: 8, maxBonds: 2, role: 'nonmetal' },
+            { z: 9,  symbol: 'F',  name: 'Fluorine',   category: 'nonmetal',  en: 3.98, valence: 7, targetShell: 8, maxBonds: 1, role: 'nonmetal' },
+            { z: 11, symbol: 'Na', name: 'Sodium',     category: 'metal',     en: 0.93, valence: 1, targetShell: 8, maxBonds: 1, role: 'metal' },
+            { z: 12, symbol: 'Mg', name: 'Magnesium',  category: 'metal',     en: 1.31, valence: 2, targetShell: 8, maxBonds: 2, role: 'metal' },
+            { z: 13, symbol: 'Al', name: 'Aluminum',   category: 'metal',     en: 1.61, valence: 3, targetShell: 8, maxBonds: 3, role: 'metal' },
+            { z: 14, symbol: 'Si', name: 'Silicon',    category: 'metalloid', en: 1.90, valence: 4, targetShell: 8, maxBonds: 4, role: 'nonmetal' },
+            { z: 15, symbol: 'P',  name: 'Phosphorus', category: 'nonmetal',  en: 2.19, valence: 5, targetShell: 8, maxBonds: 3, role: 'nonmetal' },
+            { z: 16, symbol: 'S',  name: 'Sulfur',     category: 'nonmetal',  en: 2.58, valence: 6, targetShell: 8, maxBonds: 2, role: 'nonmetal' },
+            { z: 17, symbol: 'Cl', name: 'Chlorine',   category: 'nonmetal',  en: 3.16, valence: 7, targetShell: 8, maxBonds: 1, role: 'nonmetal' },
+            { z: 19, symbol: 'K',  name: 'Potassium',  category: 'metal',     en: 0.82, valence: 1, targetShell: 8, maxBonds: 1, role: 'metal' },
+            { z: 20, symbol: 'Ca', name: 'Calcium',    category: 'metal',     en: 1.00, valence: 2, targetShell: 8, maxBonds: 2, role: 'metal' }
+        ];
+
+        // Quick lookup map by symbol
+        const ELEMENT_MAP = Object.fromEntries(ELEMENTS.map(el => [el.symbol, el]));
+
+        // Common Molecule Dictionary for Educational Recognition
+        const KNOWN_MOLECULES = {
+            'H2O':   { name: 'Water', desc: 'Oxygen shares one pair of electrons with each Hydrogen atom, forming two polar covalent bonds.' },
+            'NaCl':  { name: 'Sodium Chloride (Table Salt)', desc: 'Sodium (metal) transfers its 1 valence electron to Chlorine (non-metal), creating Na⁺ and Cl⁻ ions held by electrostatic attraction.' },
+            'CO2':   { name: 'Carbon Dioxide', desc: 'Carbon forms two double covalent bonds with Oxygen atoms, sharing 4 pairs of electrons total.' },
+            'CH4':   { name: 'Methane', desc: 'Carbon shares its 4 valence electrons with 4 Hydrogen atoms to achieve a full octet.' },
+            'MgO':   { name: 'Magnesium Oxide', desc: 'Magnesium transfers 2 valence electrons to Oxygen, forming Mg²⁺ and O²⁻ ions.' },
+            'NH3':   { name: 'Ammonia', desc: 'Nitrogen shares 3 electrons with 3 Hydrogen atoms and retains 1 lone pair.' },
+            'CaCl2': { name: 'Calcium Chloride', desc: 'Calcium donates 1 electron to each of two Chlorine atoms, resulting in Ca²⁺ and two Cl⁻ ions.' },
+            'H2':    { name: 'Hydrogen Gas', desc: 'Two Hydrogen atoms share their single electrons to complete their 1s duet shell.' },
+            'O2':    { name: 'Oxygen Gas', desc: 'Two Oxygen atoms share two pairs of electrons, forming a double covalent bond.' },
+            'N2':    { name: 'Nitrogen Gas', desc: 'Two Nitrogen atoms share three pairs of electrons, forming a strong triple covalent bond.' },
+            'HCl':   { name: 'Hydrogen Chloride', desc: 'Hydrogen and Chlorine share one electron pair in a polar covalent bond.' },
+            'LiF':   { name: 'Lithium Fluoride', desc: 'Lithium transfers its valence electron to Fluorine (ΔEN = 3.00), forming a strong ionic bond.' },
+            'C2H4':  { name: 'Ethene (Ethylene)', desc: 'Two Carbon atoms share a double covalent bond (4e⁻) and each bonds with two Hydrogens.' },
+            'C2H2':  { name: 'Ethyne (Acetylene)', desc: 'Two Carbon atoms share a triple covalent bond (6e⁻) and each forms a single bond with Hydrogen.' },
+            'CHN':   { name: 'Hydrogen Cyanide', desc: 'Carbon forms a single bond with Hydrogen and a triple covalent bond (6e⁻) with Nitrogen.' },
+            'HCN':   { name: 'Hydrogen Cyanide', desc: 'Carbon forms a single bond with Hydrogen and a triple covalent bond (6e⁻) with Nitrogen.' },
+            'AlCl3': { name: 'Aluminum Chloride', desc: 'Aluminum transfers 3 electrons across three Chlorine atoms.' },
+            'SiO2':  { name: 'Silicon Dioxide', desc: 'Silicon forms double covalent bonds with two Oxygen atoms.' },
+            'CH2O':  { name: 'Formaldehyde', desc: 'Carbon forms a double bond with Oxygen and single bonds with two Hydrogens.' }
+        };
+
+        /**
+         * ============================================================================
+         * 2. APPLICATION STATE
+         * ============================================================================
+         */
+        let atoms = []; // { id, symbol, x, y }
+        let bonds = []; // { id, atomA, atomB, type: 'covalent'|'ionic', order: 1|2|3 }
+        let historyStack = [];
+        let recentlyRearrangedBondIds = new Set();
+        let nextAtomId = 1;
+        let nextBondId = 1;
+        let showValenceDots = true;
+        let activeVSEPRData = null;
+
+        // Interaction State
+        let activeDragAtom = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let hasMovedSignificantly = false;
+        let candidateTargetAtom = null; // Highlighted atom when dragging close to bond
+
+        // DOM References
+        const paletteEl = document.getElementById('elementPalette');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const bondLayer = document.getElementById('bondLayer');
+        const atomLayer = document.getElementById('atomLayer');
+        const emptyStateHint = document.getElementById('emptyStateHint');
+        const trashZone = document.getElementById('trashZone');
+
+        /**
+         * ============================================================================
+         * 3. INITIALIZATION & ELEMENT PALETTE RENDERING
+         * ============================================================================
+         */
+        function initPalette() {
+            paletteEl.innerHTML = '';
+            ELEMENTS.forEach(el => {
+                const style = getCategoryStyle(el.category);
+                const btn = document.createElement('div');
+                btn.className = `group relative rounded-xl p-2 border ${style.border} ${style.bg} hover:brightness-110 active:scale-95 transition-all cursor-grab select-none flex flex-col justify-between shadow-sm`;
+                btn.setAttribute('draggable', 'true');
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between text-[10px] font-mono opacity-80">
+                        <span>${el.z}</span>
+                        <span title="Electronegativity">${el.en.toFixed(1)}</span>
+                    </div>
+                    <div class="text-center my-0.5">
+                        <span class="text-lg font-bold tracking-tight text-white">${el.symbol}</span>
+                        <span class="block text-[10px] truncate opacity-80">${el.name}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[9px] font-mono opacity-75 pt-0.5 border-t border-white/10">
+                        <span>Val:${el.valence}</span>
+                        <span>Cap:${el.maxBonds}</span>
+                    </div>
+                `;
+
+                // Hover info update
+                btn.addEventListener('mouseenter', () => updateElementDetail(el));
+
+                // Click to spawn near center with slight jitter
+                btn.addEventListener('click', () => {
+                    const rect = canvasContainer.getBoundingClientRect();
+                    const jitterX = (Math.random() - 0.5) * 140;
+                    const jitterY = (Math.random() - 0.5) * 140;
+                    addAtom(el.symbol, rect.width / 2 + jitterX, rect.height / 2 + jitterY);
+                });
+
+                // HTML5 Drag from palette to canvas
+                btn.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', el.symbol);
+                });
+
+                paletteEl.appendChild(btn);
+            });
+
+            // Setup Canvas Drop Target for HTML5 Drag
+            canvasContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+            canvasContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const symbol = e.dataTransfer.getData('text/plain');
+                if (symbol && ELEMENT_MAP[symbol]) {
+                    const rect = canvasContainer.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const newAtom = addAtom(symbol, x, y);
+                    // Automatically check if dropped right next to a valid atom!
+                    attemptAutoBondOnDrop(newAtom);
+                }
+            });
+        }
+
+        function getCategoryStyle(category) {
+            if (category === 'metal') {
+                return {
+                    bg: 'bg-amber-500/15',
+                    border: 'border-amber-500/40',
+                    atomBg: 'from-amber-500 to-orange-600',
+                    ring: 'ring-amber-400',
+                    text: 'text-amber-300'
+                };
+            } else if (category === 'metalloid') {
+                return {
+                    bg: 'bg-teal-500/15',
+                    border: 'border-teal-500/40',
+                    atomBg: 'from-teal-500 to-emerald-600',
+                    ring: 'ring-teal-400',
+                    text: 'text-teal-300'
+                };
+            } else {
+                return {
+                    bg: 'bg-sky-500/15',
+                    border: 'border-sky-500/40',
+                    atomBg: 'from-sky-500 to-indigo-600',
+                    ring: 'ring-sky-400',
+                    text: 'text-sky-300'
+                };
+            }
+        }
+
+        function updateElementDetail(el) {
+            document.getElementById('detailName').textContent = `${el.name} (${el.category})`;
+            document.getElementById('detailZ').textContent = `Z = ${el.z}`;
+            document.getElementById('detailEN').textContent = `${el.en.toFixed(2)} Pauling`;
+            document.getElementById('detailValence').textContent = `${el.valence}e⁻ (Max ${el.maxBonds} bonds)`;
+        }
+
+        /**
+         * ============================================================================
+         * 4. CHEMISTRY ENGINE: VALENCE, BOND CLASSIFICATION & IONIC CHARGES
+         * ============================================================================
+         */
+        function getAtomBonds(atomId) {
+            return bonds.filter(b => b.atomA === atomId || b.atomB === atomId);
+        }
+
+        function getUsedBondCapacity(atomId) {
+            return getAtomBonds(atomId).reduce((sum, b) => sum + b.order, 0);
+        }
+
+        function getAvailableCapacity(atomId) {
+            const atom = atoms.find(a => a.id === atomId);
+            if (!atom) return 0;
+            const el = ELEMENT_MAP[atom.symbol];
+            return Math.max(0, el.maxBonds - getUsedBondCapacity(atomId));
+        }
+
+        /**
+         * Finds the best covalent multiple bond (order >= 2) attached to `atomId`
+         * that can be stepped down by 1 order to free up a valence slot.
+         */
+        function findReallocatableMultipleBond(atomId, excludeNeighborId = null) {
+            const candidates = getAtomBonds(atomId).filter(b => {
+                if (b.type !== 'covalent' || b.order < 2) return false;
+                const neighborId = b.atomA === atomId ? b.atomB : b.atomA;
+                return neighborId !== excludeNeighborId;
+            });
+
+            if (candidates.length === 0) return null;
+
+            // Prioritize highest bond order (triple -> double), then most recently created bond
+            candidates.sort((a, b) => {
+                if (b.order !== a.order) return b.order - a.order;
+                return b.id - a.id;
+            });
+
+            return candidates[0];
+        }
+
+        function saveHistorySnapshot() {
+            historyStack.push({
+                atoms: atoms.map(a => ({ ...a })),
+                bonds: bonds.map(b => ({ ...b })),
+                nextAtomId,
+                nextBondId
+            });
+            if (historyStack.length > 30) historyStack.shift();
+            updateUndoButton();
+        }
+
+        function updateUndoButton() {
+            const btn = document.getElementById('undoBtn');
+            if (btn) btn.disabled = historyStack.length === 0;
+        }
+
+        function undoLastAction() {
+            if (historyStack.length === 0) return;
+            const prev = historyStack.pop();
+            atoms = prev.atoms;
+            bonds = prev.bonds;
+            nextAtomId = prev.nextAtomId;
+            nextBondId = prev.nextBondId;
+            recentlyRearrangedBondIds.clear();
+            updateUndoButton();
+            renderAll();
+            showToast('Reverted last action', 'neutral');
+        }
+
+        /**
+         * Determines whether two elements form an Ionic or Covalent bond
+         */
+        function classifyBond(elA, elB) {
+            const isMetalA = elA.role === 'metal';
+            const isMetalB = elB.role === 'metal';
+
+            // Two metals do not form standard localized covalent/ionic bonds here
+            if (isMetalA && isMetalB) {
+                return { valid: false, reason: 'Two metals form metallic lattices rather than discrete molecules.' };
+            }
+
+            // Metal + Non-metal -> Ionic Bond
+            if (isMetalA !== isMetalB) {
+                return { valid: true, type: 'ionic' };
+            }
+
+            // Both Non-metals/Metalloids -> Covalent Bond
+            const deltaEN = Math.abs(elA.en - elB.en);
+            if (deltaEN >= 1.9 && elA.symbol !== 'H' && elB.symbol !== 'H') {
+                return { valid: true, type: 'ionic' };
+            }
+
+            return { valid: true, type: 'covalent' };
+        }
+
+        /**
+         * Computes the formal/ionic charge of each atom based on its Ionic bonds.
+         * Metals lose electrons (+charge), Non-metals gain electrons (-charge).
+         */
+        function calculateIonicCharge(atomId) {
+            const atom = atoms.find(a => a.id === atomId);
+            if (!atom) return 0;
+            const el = ELEMENT_MAP[atom.symbol];
+            let charge = 0;
+
+            const atomBonds = getAtomBonds(atomId);
+            atomBonds.forEach(b => {
+                if (b.type === 'ionic') {
+                    const otherId = b.atomA === atomId ? b.atomB : b.atomA;
+                    const otherAtom = atoms.find(a => a.id === otherId);
+                    if (!otherAtom) return;
+                    const otherEl = ELEMENT_MAP[otherAtom.symbol];
+
+                    // Less electronegative / metal loses electrons (+)
+                    // More electronegative / nonmetal gains electrons (-)
+                    if (el.en < otherEl.en) {
+                        charge += b.order;
+                    } else {
+                        charge -= b.order;
+                    }
+                }
+            });
+            return charge;
+        }
+
+        function formatChargeBadge(charge) {
+            if (charge === 0) return '';
+            if (charge === 1) return '+';
+            if (charge === -1) return '−';
+            if (charge > 1) return `${charge}+`;
+            return `${Math.abs(charge)}−`;
+        }
+
+        /**
+         * ============================================================================
+         * 5. WORKBENCH ACTIONS (Add, Remove, Bond, Clear)
+         * ============================================================================
+         */
+        function addAtom(symbol, x, y, recordHistory = true) {
+            if (recordHistory) saveHistorySnapshot();
+            const rect = canvasContainer.getBoundingClientRect();
+            const padding = 44;
+            const clampedX = Math.max(padding, Math.min(rect.width - padding, x));
+            const clampedY = Math.max(padding, Math.min(rect.height - padding, y));
+
+            const atom = {
+                id: nextAtomId++,
+                symbol,
+                x: clampedX,
+                y: clampedY
+            };
+            atoms.push(atom);
+            renderAll();
+            return atom;
+        }
+
+        function removeAtom(atomId) {
+            saveHistorySnapshot();
+            atoms = atoms.filter(a => a.id !== atomId);
+            bonds = bonds.filter(b => b.atomA !== atomId && b.atomB !== atomId);
+            showToast('Atom removed from workbench', 'neutral');
+            renderAll();
+        }
+
+        function removeBond(bondId) {
+            const bond = bonds.find(b => b.id === bondId);
+            if (!bond) return;
+
+            saveHistorySnapshot();
+            if (bond.type === 'covalent') {
+                const atomA = atoms.find(a => a.id === bond.atomA);
+                const atomB = atoms.find(a => a.id === bond.atomB);
+                const availA = getAvailableCapacity(bond.atomA);
+                const availB = getAvailableCapacity(bond.atomB);
+
+                // Cycle bond order manually on click (1 -> 2 -> 3 -> break), respecting valence limits
+                if (bond.order < 3 && availA >= 1 && availB >= 1) {
+                    bond.order += 1;
+                    const label = bond.order === 2 ? 'Double (2 pairs)' : 'Triple (3 pairs)';
+                    showToast(`Cycled to ${label} covalent bond`, 'covalent');
+                } else {
+                    bonds = bonds.filter(b => b.id !== bondId);
+                    showToast('Covalent bond broken', 'neutral');
+                }
+            } else {
+                bonds = bonds.filter(b => b.id !== bondId);
+                showToast('Ionic bond broken', 'neutral');
+            }
+            renderAll();
+        }
+
+        /**
+         * Automatically determines the ideal bond order when two atoms connect:
+         * - For covalent bonds: automatically creates a Double (2) or Triple (3) bond
+         *   when both atoms need multiple electrons to complete their octet!
+         * - For ionic bonds: transfers up to the minimum available valence capacity.
+         */
+        function computeIdealBondOrder(atomA, atomB, bondType) {
+            const elA = ELEMENT_MAP[atomA.symbol];
+            const elB = ELEMENT_MAP[atomB.symbol];
+            const capA = getAvailableCapacity(atomA.id);
+            const capB = getAvailableCapacity(atomB.id);
+            const maxPossible = Math.min(capA, capB, 3);
+
+            if (maxPossible <= 1) return 1;
+
+            if (bondType === 'ionic') {
+                // Ionic transfer automatically satisfies as much valence capacity as possible (e.g., Mg2+ + O2- -> 2)
+                return maxPossible;
+            }
+
+            // Covalent automatic double/triple bond intelligence:
+            // 1. Homonuclear diatomic pairs (O+O -> double, N+N -> triple, C+C -> triple if unbonded)
+            if (elA.symbol === elB.symbol) {
+                return maxPossible;
+            }
+
+            // 2. Terminal atom with 1 remaining capacity (like H, F, Cl) always forms a single bond
+            if (capA === 1 || capB === 1) {
+                return 1;
+            }
+
+            // 3. Two multivalent non-metals (e.g., C + O -> double bond in CO2; C + N -> triple bond in HCN; C + S -> double)
+            // If one atom is Oxygen/Sulfur (cap 2) and the other is Carbon/Silicon (cap 2..4), form a Double Bond (2)
+            // If Nitrogen (cap 3) connects with Carbon (cap 3..4), form a Triple Bond (3)
+            if ((elA.symbol === 'O' || elA.symbol === 'S') && capA === 2 && capB >= 2) {
+                return 2;
+            }
+            if ((elB.symbol === 'O' || elB.symbol === 'S') && capB === 2 && capA >= 2) {
+                return 2;
+            }
+            if (elA.symbol === 'N' && capA === 3 && capB >= 3) {
+                return 3;
+            }
+            if (elB.symbol === 'N' && capB === 3 && capA >= 3) {
+                return 3;
+            }
+
+            // General rule: if both atoms have >= 2 open slots and neither has other neighbors yet, maximize shared pairs up to 3
+            const neighborsA = getAtomBonds(atomA.id).length;
+            const neighborsB = getAtomBonds(atomB.id).length;
+            if (neighborsA === 0 && neighborsB === 0) {
+                return maxPossible;
+            }
+
+            return Math.min(2, maxPossible);
+        }
+
+        function tryCreateOrUpgradeBond(atomAId, atomBId, forcedOrder = null) {
+            if (atomAId === atomBId) return false;
+            const atomA = atoms.find(a => a.id === atomAId);
+            const atomB = atoms.find(a => a.id === atomBId);
+            if (!atomA || !atomB) return false;
+
+            const elA = ELEMENT_MAP[atomA.symbol];
+            const elB = ELEMENT_MAP[atomB.symbol];
+
+            // Check available valence capacity on both atoms
+            const capA = getAvailableCapacity(atomAId);
+            const capB = getAvailableCapacity(atomBId);
+
+            // Classify bond type
+            const classification = classifyBond(elA, elB);
+            if (!classification.valid) {
+                showToast(classification.reason, 'error');
+                return false;
+            }
+
+            // Check if a bond already exists between these two atoms
+            const existingBond = bonds.find(b =>
+                (b.atomA === atomAId && b.atomB === atomBId) ||
+                (b.atomA === atomBId && b.atomB === atomAId)
+            );
+
+            if (existingBond) {
+                if (existingBond.order >= 3) {
+                    showToast('Maximum triple bond reached!', 'error');
+                    return false;
+                }
+                if (capA <= 0 || capB <= 0) {
+                    const fullAtom = capA <= 0 ? elA.symbol : elB.symbol;
+                    showToast(`${fullAtom} already has a full valence shell!`, 'error');
+                    return false;
+                }
+                saveHistorySnapshot();
+                existingBond.order += 1;
+                const bondLabel = existingBond.order === 2 ? 'Double (2e⁻ pairs)' : 'Triple (3e⁻ pairs)';
+                showToast(
+                    `Upgraded to ${bondLabel} ${existingBond.type} bond (${elA.symbol} & ${elB.symbol})!`,
+                    existingBond.type
+                );
+            } else {
+                // Check if either or both atoms have 0 available capacity due to a double/triple covalent bond
+                let reallocBondA = capA <= 0 ? findReallocatableMultipleBond(atomAId, atomBId) : null;
+                let reallocBondB = capB <= 0 ? findReallocatableMultipleBond(atomBId, atomAId) : null;
+
+                // Edge case: if both atoms share the exact same multiple bond, only step it down once
+                if (reallocBondA && reallocBondB && reallocBondA.id === reallocBondB.id) {
+                    showToast(`${elA.symbol} and ${elB.symbol} are already bonded together!`, 'error');
+                    return false;
+                }
+
+                if (capA <= 0 && !reallocBondA) {
+                    showToast(`${elA.symbol} already has a full valence shell!`, 'error');
+                    return false;
+                }
+                if (capB <= 0 && !reallocBondB) {
+                    showToast(`${elB.symbol} already has a full valence shell!`, 'error');
+                    return false;
+                }
+
+                saveHistorySnapshot();
+                recentlyRearrangedBondIds.clear();
+
+                const rearrangementNotes = [];
+
+                // Step down multiple bond on Atom A if needed (e.g., C=O -> C-O when connecting H to O)
+                if (reallocBondA) {
+                    const prevSymbol = reallocBondA.order === 3 ? '≡' : '=';
+                    const nextSymbol = reallocBondA.order === 3 ? '=' : '–';
+                    const partnerId = reallocBondA.atomA === atomAId ? reallocBondA.atomB : reallocBondA.atomA;
+                    const partnerAtom = atoms.find(a => a.id === partnerId);
+                    reallocBondA.order -= 1;
+                    recentlyRearrangedBondIds.add(reallocBondA.id);
+                    if (partnerAtom) {
+                        rearrangementNotes.push(`${partnerAtom.symbol}${prevSymbol}${elA.symbol} opened → ${partnerAtom.symbol}${nextSymbol}${elA.symbol}–${elB.symbol}`);
+                    }
+                }
+
+                // Step down multiple bond on Atom B if needed (e.g., C=O -> C-O when O is the stationary target)
+                if (reallocBondB) {
+                    const prevSymbol = reallocBondB.order === 3 ? '≡' : '=';
+                    const nextSymbol = reallocBondB.order === 3 ? '=' : '–';
+                    const partnerId = reallocBondB.atomA === atomBId ? reallocBondB.atomB : reallocBondB.atomA;
+                    const partnerAtom = atoms.find(a => a.id === partnerId);
+                    reallocBondB.order -= 1;
+                    recentlyRearrangedBondIds.add(reallocBondB.id);
+                    if (partnerAtom) {
+                        rearrangementNotes.push(`${partnerAtom.symbol}${prevSymbol}${elB.symbol} opened → ${partnerAtom.symbol}${nextSymbol}${elB.symbol}–${elA.symbol}`);
+                    }
+                }
+
+                // Recompute available capacities after any bond step-down
+                const effectiveCapA = getAvailableCapacity(atomAId);
+                const effectiveCapB = getAvailableCapacity(atomBId);
+
+                // If a multiple bond had to be opened to make room, form a single bond (order 1)
+                const autoOrder = (reallocBondA || reallocBondB)
+                    ? 1
+                    : (forcedOrder !== null
+                        ? Math.min(forcedOrder, effectiveCapA, effectiveCapB, 3)
+                        : computeIdealBondOrder(atomA, atomB, classification.type));
+
+                const newBond = {
+                    id: nextBondId++,
+                    atomA: atomAId,
+                    atomB: atomBId,
+                    type: classification.type,
+                    order: autoOrder
+                };
+                bonds.push(newBond);
+
+                if (rearrangementNotes.length > 0) {
+                    recentlyRearrangedBondIds.add(newBond.id);
+                    showToast(`Bond rearranged: ${rearrangementNotes[0]}`, 'covalent');
+                    setTimeout(() => {
+                        recentlyRearrangedBondIds.clear();
+                        renderBonds();
+                    }, 900);
+                } else {
+                    const orderPrefix = autoOrder === 3 ? 'Triple ' : autoOrder === 2 ? 'Double ' : '';
+                    const sharedInfo = classification.type === 'covalent'
+                        ? `${autoOrder * 2} shared e⁻`
+                        : `${autoOrder}e⁻ transferred`;
+
+                    const desc = classification.type === 'ionic'
+                        ? `Ionic bond (${sharedInfo}): ${elA.symbol} ↔ ${elB.symbol}`
+                        : `Auto ${orderPrefix}Covalent Bond (${sharedInfo}) formed between ${elA.symbol} & ${elB.symbol}!`;
+                    showToast(desc, classification.type);
+                }
+            }
+
+            // Slightly separate atoms if they are overlapping too closely
+            const dx = atomB.x - atomA.x;
+            const dy = atomB.y - atomA.y;
+            const dist = Math.hypot(dx, dy);
+            const idealDist = 122;
+            if (dist < 90) {
+                const angle = dist > 1 ? Math.atan2(dy, dx) : 0;
+                atomA.x = atomB.x - Math.cos(angle) * idealDist;
+                atomA.y = atomB.y - Math.sin(angle) * idealDist;
+                clampAtomPosition(atomA);
+            }
+
+            renderAll();
+            return true;
+        }
+
+        function attemptAutoBondOnDrop(droppedAtom) {
+            const SNAP_DISTANCE = 95;
+            let closest = null;
+            let minDist = SNAP_DISTANCE;
+
+            atoms.forEach(other => {
+                if (other.id === droppedAtom.id) return;
+                const d = Math.hypot(other.x - droppedAtom.x, other.y - droppedAtom.y);
+                if (d < minDist) {
+                    minDist = d;
+                    closest = other;
+                }
+            });
+
+            if (closest) {
+                tryCreateOrUpgradeBond(droppedAtom.id, closest.id);
+            }
+        }
+
+        function clampAtomPosition(atom) {
+            const rect = canvasContainer.getBoundingClientRect();
+            const pad = 42;
+            atom.x = Math.max(pad, Math.min(rect.width - pad, atom.x));
+            atom.y = Math.max(pad, Math.min(rect.height - pad, atom.y));
+        }
+
+        function clearWorkspace(recordHistory = false) {
+            if (recordHistory && atoms.length > 0) saveHistorySnapshot();
+            atoms = [];
+            bonds = [];
+            recentlyRearrangedBondIds.clear();
+            nextAtomId = 1;
+            nextBondId = 1;
+            updateUndoButton();
+            renderAll();
+            showToast('Workbench cleared', 'neutral');
+        }
+
+        function toggleValenceDots() {
+            showValenceDots = !showValenceDots;
+            const btn = document.getElementById('toggleElectronsBtn');
+            btn.classList.toggle('ring-2', showValenceDots);
+            btn.classList.toggle('ring-amber-400/50', showValenceDots);
+            renderAll();
+        }
+
+        /**
+         * ============================================================================
+         * 6. POINTER DRAG & INTERACTION LOGIC (Mouse + Touch Support)
+         * ============================================================================
+         */
+        function startAtomDrag(e, atom) {
+            if (e.button === 2) return; // Ignore right click
+            e.preventDefault();
+            e.stopPropagation();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const rect = canvasContainer.getBoundingClientRect();
+
+            activeDragAtom = atom;
+            dragOffsetX = (clientX - rect.left) - atom.x;
+            dragOffsetY = (clientY - rect.top) - atom.y;
+            dragStartX = atom.x;
+            dragStartY = atom.y;
+            hasMovedSignificantly = false;
+            candidateTargetAtom = null;
+
+            updateElementDetail(ELEMENT_MAP[atom.symbol]);
+        }
+
+        function handlePointerMove(e) {
+            if (!activeDragAtom) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const rect = canvasContainer.getBoundingClientRect();
+
+            const newX = (clientX - rect.left) - dragOffsetX;
+            const newY = (clientY - rect.top) - dragOffsetY;
+
+            if (Math.hypot(newX - dragStartX, newY - dragStartY) > 6) {
+                hasMovedSignificantly = true;
+            }
+
+            activeDragAtom.x = newX;
+            activeDragAtom.y = newY;
+            clampAtomPosition(activeDragAtom);
+
+            // Check Trash Zone hover
+            const trashRect = trashZone.getBoundingClientRect();
+            const isOverTrash = (
+                clientX >= trashRect.left && clientX <= trashRect.right &&
+                clientY >= trashRect.top && clientY <= trashRect.bottom
+            );
+            trashZone.classList.toggle('bg-rose-500/30', isOverTrash);
+            trashZone.classList.toggle('border-rose-500', isOverTrash);
+            trashZone.classList.toggle('text-rose-300', isOverTrash);
+            trashZone.classList.toggle('scale-110', isOverTrash);
+
+            // Detect nearby atom for potential bonding preview
+            const BOND_PROXIMITY = 92;
+            let nearest = null;
+            let minD = BOND_PROXIMITY;
+
+            atoms.forEach(other => {
+                if (other.id === activeDragAtom.id) return;
+                const d = Math.hypot(other.x - activeDragAtom.x, other.y - activeDragAtom.y);
+                if (d < minD) {
+                    minD = d;
+                    nearest = other;
+                }
+            });
+
+            candidateTargetAtom = nearest;
+            renderAll();
+        }
+
+        function handlePointerUp(e) {
+            if (!activeDragAtom) return;
+
+            const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+            const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+
+            // Check if dropped onto Trash Zone
+            const trashRect = trashZone.getBoundingClientRect();
+            const isOverTrash = (
+                clientX >= trashRect.left && clientX <= trashRect.right &&
+                clientY >= trashRect.top && clientY <= trashRect.bottom
+            );
+
+            trashZone.classList.remove('bg-rose-500/30', 'border-rose-500', 'text-rose-300', 'scale-110');
+
+            const dragged = activeDragAtom;
+            const target = candidateTargetAtom;
+            activeDragAtom = null;
+            candidateTargetAtom = null;
+
+            if (isOverTrash) {
+                removeAtom(dragged.id);
+                return;
+            }
+
+            // If dragged close to another atom, attempt to form/upgrade bond!
+            if (target && hasMovedSignificantly) {
+                tryCreateOrUpgradeBond(dragged.id, target.id);
+            } else {
+                renderAll();
+            }
+        }
+
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+
+        /**
+         * ============================================================================
+         * 7. RENDERING ENGINE (SVG Bonds + HTML Atoms + Inspector)
+         * ============================================================================
+         */
+        function renderAll() {
+            emptyStateHint.style.opacity = atoms.length === 0 ? '1' : '0';
+            activeVSEPRData = computeVSEPRAnalysis();
+            renderBonds();
+            renderAtoms();
+            updateInspector();
+        }
+
+        /**
+         * ============================================================================
+         * 7B. VSEPR THEORY ENGINE (Steric Number, Lone Pairs, Geometry & Snap Layout)
+         * ============================================================================
+         */
+        function computeVSEPRAnalysis() {
+            if (atoms.length < 2 || bonds.length === 0) return null;
+
+            // Find the central atom: prioritize non-terminal covalent atom with most neighbors,
+            // breaking ties by lower electronegativity (except H)
+            let centralAtom = null;
+            let maxNeighbors = 0;
+
+            atoms.forEach(atom => {
+                const atomBonds = getAtomBonds(atom.id);
+                if (atomBonds.length > maxNeighbors) {
+                    maxNeighbors = atomBonds.length;
+                    centralAtom = atom;
+                } else if (atomBonds.length === maxNeighbors && maxNeighbors > 0 && centralAtom) {
+                    const currEl = ELEMENT_MAP[atom.symbol];
+                    const bestEl = ELEMENT_MAP[centralAtom.symbol];
+                    if (currEl.symbol !== 'H' && (bestEl.symbol === 'H' || currEl.en < bestEl.en)) {
+                        centralAtom = atom;
+                    }
+                }
+            });
+
+            if (!centralAtom || maxNeighbors === 0) return null;
+
+            const el = ELEMENT_MAP[centralAtom.symbol];
+            const atomBonds = getAtomBonds(centralAtom.id);
+            const hasIonic = atomBonds.some(b => b.type === 'ionic');
+
+            // Number of bonded outer atoms (X)
+            const bondingDomains = atomBonds.length;
+            const totalBondOrder = atomBonds.reduce((sum, b) => sum + b.order, 0);
+            const charge = calculateIonicCharge(centralAtom.id);
+
+            // Calculate remaining unbonded valence electrons -> lone pairs (E)
+            const unbondedElectrons = charge > 0
+                ? Math.max(0, el.valence - charge)
+                : Math.max(0, el.valence - totalBondOrder);
+            const lonePairs = Math.floor(unbondedElectrons / 2);
+            const stericNumber = bondingDomains + lonePairs;
+
+            // Diatomic case (only 2 atoms total)
+            if (atoms.length === 2 && bondingDomains === 1) {
+                return {
+                    centralAtom,
+                    bondingDomains: 1,
+                    lonePairs,
+                    stericNumber,
+                    notation: `AXE${lonePairs > 0 ? (lonePairs > 1 ? lonePairs : '') : ''}`,
+                    geometry: 'Linear (Diatomic)',
+                    electronGeometry: 'Linear',
+                    angleLabel: '180°',
+                    targetAnglesDeg: [0],
+                    hasIonic
+                };
+            }
+
+            // Lookup VSEPR shape, ideal bond angles, and 2D projection angles (in degrees)
+            let geometry = 'Custom Polyatomic';
+            let electronGeometry = 'Tetrahedral';
+            let angleLabel = '109.5°';
+            let targetAnglesDeg = [];
+
+            if (stericNumber === 2 && lonePairs === 0) {
+                geometry = 'Linear';
+                electronGeometry = 'Linear';
+                angleLabel = '180°';
+                targetAnglesDeg = [180, 0]; // Left & Right
+            } else if (stericNumber === 3 && lonePairs === 0) {
+                geometry = 'Trigonal Planar';
+                electronGeometry = 'Trigonal Planar';
+                angleLabel = '120°';
+                targetAnglesDeg = [-90, 30, 150]; // Symmetric 120° triad
+            } else if (stericNumber === 3 && lonePairs === 1) {
+                geometry = 'Bent (V-Shaped)';
+                electronGeometry = 'Trigonal Planar';
+                angleLabel = '~118° (< 120°)';
+                targetAnglesDeg = [149, 31]; // Lone pair at top (-90°), bonds pushed down by 118°
+            } else if (stericNumber === 4 && lonePairs === 0) {
+                geometry = 'Tetrahedral';
+                electronGeometry = 'Tetrahedral';
+                angleLabel = '109.5°';
+                targetAnglesDeg = [-90, 19.5, 160.5, 90]; // 2D projection of 109.5° tetrahedral
+            } else if (stericNumber === 4 && lonePairs === 1) {
+                geometry = 'Trigonal Pyramidal';
+                electronGeometry = 'Tetrahedral';
+                angleLabel = '~107° (< 109.5°)';
+                targetAnglesDeg = [143.5, 90, 36.5]; // Lone pair on top (-90°), 3 bonds below
+            } else if (stericNumber === 4 && lonePairs === 2) {
+                geometry = 'Bent (Angular)';
+                electronGeometry = 'Tetrahedral';
+                angleLabel = '~104.5° (< 109.5°)';
+                targetAnglesDeg = [142.25, 37.75]; // 2 lone pairs on top, 104.5° angle between bonds
+            } else {
+                // Fallback equal angular spacing
+                const step = 360 / bondingDomains;
+                targetAnglesDeg = Array.from({ length: bondingDomains }, (_, i) => -90 + i * step);
+                geometry = `${bondingDomains}-Coordinate`;
+                electronGeometry = `${stericNumber}-Domain`;
+                angleLabel = `${Math.round(step)}°`;
+            }
+
+            const xPart = bondingDomains === 1 ? 'X' : `X${bondingDomains}`;
+            const ePart = lonePairs === 0 ? '' : lonePairs === 1 ? 'E' : `E${lonePairs}`;
+
+            return {
+                centralAtom,
+                bondingDomains,
+                lonePairs,
+                stericNumber,
+                notation: `A${xPart}${ePart}`,
+                geometry,
+                electronGeometry,
+                angleLabel,
+                targetAnglesDeg,
+                hasIonic
+            };
+        }
+
+        /**
+         * Smoothly animates bonded neighbor atoms into their ideal VSEPR bond angles
+         * around the central atom (and cascades outward for multi-center molecules).
+         */
+        function arrangeByVSEPR() {
+            const vsepr = computeVSEPRAnalysis();
+            if (!vsepr || !vsepr.centralAtom) return;
+
+            saveHistorySnapshot();
+
+            const center = vsepr.centralAtom;
+            const rect = canvasContainer.getBoundingClientRect();
+            const targetCenterX = Math.max(150, Math.min(rect.width - 150, center.x));
+            const targetCenterY = Math.max(140, Math.min(rect.height - 140, center.y));
+
+            const neighborBonds = getAtomBonds(center.id);
+            const neighbors = neighborBonds
+                .map(b => atoms.find(a => a.id === (b.atomA === center.id ? b.atomB : b.atomA)))
+                .filter(Boolean);
+
+            // Sort neighbors by current angle to prevent wires from crossing unnecessarily
+            neighbors.sort((a, b) => Math.atan2(a.y - center.y, a.x - center.x) - Math.atan2(b.y - center.y, b.x - center.x));
+
+            const bondLength = 128;
+            const targetPositions = new Map();
+            targetPositions.set(center.id, { x: targetCenterX, y: targetCenterY });
+
+            neighbors.forEach((nb, idx) => {
+                const deg = vsepr.targetAnglesDeg[idx % vsepr.targetAnglesDeg.length];
+                const rad = (deg * Math.PI) / 180;
+                const nx = targetCenterX + Math.cos(rad) * bondLength;
+                const ny = targetCenterY + Math.sin(rad) * bondLength;
+                targetPositions.set(nb.id, { x: nx, y: ny });
+
+                // Also fan out any secondary atoms attached to this neighbor (e.g., H in C2H2 or CH3OH)
+                const subBonds = getAtomBonds(nb.id).filter(b => b.atomA !== center.id && b.atomB !== center.id);
+                subBonds.forEach((sb, sIdx) => {
+                    const subAtom = atoms.find(a => a.id === (sb.atomA === nb.id ? sb.atomB : sb.atomA));
+                    if (!subAtom || targetPositions.has(subAtom.id)) return;
+                    const subSpread = subBonds.length === 1 ? 0 : (sIdx - (subBonds.length - 1) / 2) * (Math.PI / 2.6);
+                    const subRad = rad + subSpread;
+                    targetPositions.set(subAtom.id, {
+                        x: nx + Math.cos(subRad) * 112,
+                        y: ny + Math.sin(subRad) * 112
+                    });
+                });
+            });
+
+            // Animate smoothly over 260ms
+            const startPositions = new Map(atoms.map(a => [a.id, { x: a.x, y: a.y }]));
+            const duration = 260;
+            const startTime = performance.now();
+
+            function step(now) {
+                const t = Math.min(1, (now - startTime) / duration);
+                const ease = 1 - Math.pow(1 - t, 3); // Ease-out cubic
+
+                atoms.forEach(atom => {
+                    const target = targetPositions.get(atom.id);
+                    const start = startPositions.get(atom.id);
+                    if (target && start) {
+                        atom.x = start.x + (target.x - start.x) * ease;
+                        atom.y = start.y + (target.y - start.y) * ease;
+                        clampAtomPosition(atom);
+                    }
+                });
+
+                renderAll();
+                if (t < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    showToast(`Arranged into ${vsepr.geometry} (${vsepr.angleLabel})`, 'covalent');
+                }
+            }
+
+            requestAnimationFrame(step);
+        }
+
+        function renderBonds() {
+            bondLayer.innerHTML = '';
+
+            // 0. Render subtle VSEPR Bond Angle Arc around central atom when 2+ bonds exist
+            if (activeVSEPRData && activeVSEPRData.centralAtom && activeVSEPRData.bondingDomains >= 2 && !activeDragAtom) {
+                const c = activeVSEPRData.centralAtom;
+                const cBonds = getAtomBonds(c.id);
+                if (cBonds.length >= 2) {
+                    const angles = cBonds.map(b => {
+                        const otherId = b.atomA === c.id ? b.atomB : b.atomA;
+                        const other = atoms.find(a => a.id === otherId);
+                        return other ? Math.atan2(other.y - c.y, other.x - c.x) : 0;
+                    }).sort((a, b) => a - b);
+
+                    const a1 = angles[0];
+                    const a2 = angles[1];
+                    const arcR = 46;
+                    const x1 = c.x + Math.cos(a1) * arcR;
+                    const y1 = c.y + Math.sin(a1) * arcR;
+                    const x2 = c.x + Math.cos(a2) * arcR;
+                    const y2 = c.y + Math.sin(a2) * arcR;
+                    let diff = a2 - a1;
+                    if (diff < 0) diff += Math.PI * 2;
+                    const largeArc = diff > Math.PI ? 1 : 0;
+
+                    const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    arcPath.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${arcR} ${arcR} 0 ${largeArc} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`);
+                    arcPath.setAttribute('fill', 'none');
+                    arcPath.setAttribute('stroke', 'rgba(129, 140, 248, 0.45)');
+                    arcPath.setAttribute('stroke-width', '1.5');
+                    arcPath.setAttribute('stroke-dasharray', '3,3');
+                    bondLayer.appendChild(arcPath);
+
+                    const midAngle = a1 + diff / 2;
+                    const labelR = 60;
+                    const angleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    angleText.setAttribute('x', (c.x + Math.cos(midAngle) * labelR).toFixed(1));
+                    angleText.setAttribute('y', (c.y + Math.sin(midAngle) * labelR).toFixed(1));
+                    angleText.setAttribute('text-anchor', 'middle');
+                    angleText.setAttribute('dominant-baseline', 'middle');
+                    angleText.setAttribute('font-size', '9.5');
+                    angleText.setAttribute('font-family', 'JetBrains Mono, monospace');
+                    angleText.setAttribute('font-weight', 'bold');
+                    angleText.setAttribute('fill', '#a5b4fc');
+                    angleText.textContent = activeVSEPRData.angleLabel.split(' ')[0];
+                    bondLayer.appendChild(angleText);
+                }
+            }
+
+            // 1. Render preview snap line if dragging near a candidate target
+            if (activeDragAtom && candidateTargetAtom) {
+                const elA = ELEMENT_MAP[activeDragAtom.symbol];
+                const elB = ELEMENT_MAP[candidateTargetAtom.symbol];
+                const check = classifyBond(elA, elB);
+                const capA = getAvailableCapacity(activeDragAtom.id);
+                const capB = getAvailableCapacity(candidateTargetAtom.id);
+                const reallocA = capA <= 0 ? findReallocatableMultipleBond(activeDragAtom.id, candidateTargetAtom.id) : null;
+                const reallocB = capB <= 0 ? findReallocatableMultipleBond(candidateTargetAtom.id, activeDragAtom.id) : null;
+                const needsRearrange = Boolean((capA <= 0 && reallocA) || (capB <= 0 && reallocB));
+                const canBond = check.valid && (capA > 0 || reallocA) && (capB > 0 || reallocB);
+                const predictedOrder = !canBond ? 1 : (needsRearrange ? 1 : computeIdealBondOrder(activeDragAtom, candidateTargetAtom, check.type));
+
+                const previewLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                previewLine.setAttribute('x1', activeDragAtom.x);
+                previewLine.setAttribute('y1', activeDragAtom.y);
+                previewLine.setAttribute('x2', candidateTargetAtom.x);
+                previewLine.setAttribute('y2', candidateTargetAtom.y);
+                previewLine.setAttribute('stroke', canBond ? (needsRearrange ? '#fbbf24' : predictedOrder === 3 ? '#818cf8' : predictedOrder === 2 ? '#38bdf8' : '#34d399') : '#f43f5e');
+                previewLine.setAttribute('stroke-width', predictedOrder > 1 ? '4' : '3');
+                previewLine.setAttribute('stroke-dasharray', '6,6');
+                previewLine.setAttribute('stroke-opacity', '0.9');
+                bondLayer.appendChild(previewLine);
+
+                if (canBond && (predictedOrder > 1 || needsRearrange)) {
+                    const px = (activeDragAtom.x + candidateTargetAtom.x) / 2;
+                    const py = (activeDragAtom.y + candidateTargetAtom.y) / 2 - 14;
+                    const hintText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    hintText.setAttribute('x', px);
+                    hintText.setAttribute('y', py);
+                    hintText.setAttribute('text-anchor', 'middle');
+                    hintText.setAttribute('font-size', '10');
+                    hintText.setAttribute('font-weight', 'bold');
+                    hintText.setAttribute('font-family', 'JetBrains Mono, monospace');
+                    hintText.setAttribute('fill', needsRearrange ? '#fde68a' : predictedOrder === 3 ? '#a5b4fc' : '#7dd3fc');
+                    hintText.textContent = needsRearrange
+                        ? '⚡ Open Double/Triple → Single'
+                        : (predictedOrder === 3 ? '⚡ Auto Triple Bond' : '⚡ Auto Double Bond');
+                    bondLayer.appendChild(hintText);
+                }
+            }
+
+            // 2. Render established Covalent & Ionic bonds
+            bonds.forEach(bond => {
+                const a = atoms.find(item => item.id === bond.atomA);
+                const b = atoms.find(item => item.id === bond.atomB);
+                if (!a || !b) return;
+
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const len = Math.hypot(dx, dy);
+                if (len === 0) return;
+
+                // Unit perpendicular vector for parallel double/triple lines
+                const nx = -dy / len;
+                const ny = dx / len;
+                const midX = (a.x + b.x) / 2;
+                const midY = (a.y + b.y) / 2;
+                const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+
+                const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                group.setAttribute('class', 'cursor-pointer group');
+
+                // Electron Cloud / Pi-Orbital Glow for Double & Triple Covalent Bonds
+                if (bond.type === 'covalent' && bond.order >= 2) {
+                    const cloud = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+                    cloud.setAttribute('cx', midX);
+                    cloud.setAttribute('cy', midY);
+                    cloud.setAttribute('rx', Math.max(24, len * 0.34));
+                    cloud.setAttribute('ry', bond.order === 3 ? '17' : '13');
+                    cloud.setAttribute('transform', `rotate(${angleDeg} ${midX} ${midY})`);
+                    cloud.setAttribute('fill', bond.order === 3 ? 'rgba(129, 140, 248, 0.14)' : 'rgba(56, 189, 248, 0.12)');
+                    cloud.setAttribute('stroke', bond.order === 3 ? 'rgba(129, 140, 248, 0.35)' : 'rgba(56, 189, 248, 0.3)');
+                    cloud.setAttribute('stroke-width', '1');
+                    cloud.setAttribute('stroke-dasharray', '3,3');
+                    group.appendChild(cloud);
+                }
+
+                // Invisible thick hit area for easy clicking to cycle/break bond
+                const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hitLine.setAttribute('x1', a.x);
+                hitLine.setAttribute('y1', a.y);
+                hitLine.setAttribute('x2', b.x);
+                hitLine.setAttribute('y2', b.y);
+                hitLine.setAttribute('stroke', 'transparent');
+                hitLine.setAttribute('stroke-width', '26');
+                group.appendChild(hitLine);
+
+                // Offsets for single, double, triple bonds
+                const offsets = bond.order === 1 ? [0] : bond.order === 2 ? [-5.5, 5.5] : [-8.5, 0, 8.5];
+
+                offsets.forEach((offset, idx) => {
+                    const x1 = a.x + nx * offset;
+                    const y1 = a.y + ny * offset;
+                    const x2 = b.x + nx * offset;
+                    const y2 = b.y + ny * offset;
+
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', x2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('stroke-linecap', 'round');
+
+                    if (bond.type === 'covalent') {
+                        const strokeColor = bond.order === 3 ? '#818cf8' : '#38bdf8';
+                        line.setAttribute('stroke', strokeColor);
+                        line.setAttribute('stroke-width', bond.order === 3 ? '3' : '3.5');
+                        line.setAttribute('stroke-opacity', '0.95');
+                        if (recentlyRearrangedBondIds.has(bond.id)) {
+                            line.setAttribute('class', 'rearranged-bond-pulse');
+                        }
+                        group.appendChild(line);
+
+                        // Render shared electron pair dots directly on each covalent bond axis when Electron Pairs toggle is active
+                        if (showValenceDots) {
+                            const ux = dx / len;
+                            const uy = dy / len;
+                            const lineMidX = (x1 + x2) / 2;
+                            const lineMidY = (y1 + y2) / 2;
+                            [-3.2, 3.2].forEach(shift => {
+                                const eDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                                eDot.setAttribute('cx', lineMidX + ux * shift);
+                                eDot.setAttribute('cy', lineMidY + uy * shift);
+                                eDot.setAttribute('r', '2.1');
+                                eDot.setAttribute('fill', '#fef08a');
+                                eDot.setAttribute('stroke', '#0f172a');
+                                eDot.setAttribute('stroke-width', '0.7');
+                                group.appendChild(eDot);
+                            });
+                        }
+                    } else {
+                        // Faint dashed lines for Ionic Bonds
+                        line.setAttribute('stroke', '#fbbf24');
+                        line.setAttribute('stroke-width', '2.5');
+                        line.setAttribute('stroke-dasharray', '4,6');
+                        line.setAttribute('stroke-opacity', '0.55');
+                        group.appendChild(line);
+                    }
+                });
+
+                // Midpoint pill label showing bond type & shared electron count
+                const badgeW = bond.type === 'covalent' && bond.order > 1 ? 66 : 48;
+                const badgeBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                badgeBg.setAttribute('x', midX - badgeW / 2);
+                badgeBg.setAttribute('y', midY - 22);
+                badgeBg.setAttribute('width', badgeW);
+                badgeBg.setAttribute('height', '16');
+                badgeBg.setAttribute('rx', '6');
+                badgeBg.setAttribute('fill', '#0f172a');
+                badgeBg.setAttribute('stroke', bond.type === 'ionic' ? '#d97706' : bond.order === 3 ? '#818cf8' : '#0284c7');
+                badgeBg.setAttribute('stroke-width', '1');
+                badgeBg.setAttribute('opacity', '0.92');
+                group.appendChild(badgeBg);
+
+                const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                badgeText.setAttribute('x', midX);
+                badgeText.setAttribute('y', midY - 11);
+                badgeText.setAttribute('text-anchor', 'middle');
+                badgeText.setAttribute('font-size', '8.5');
+                badgeText.setAttribute('font-weight', 'bold');
+                badgeText.setAttribute('font-family', 'JetBrains Mono, monospace');
+                badgeText.setAttribute('fill', bond.type === 'ionic' ? '#fcd34d' : bond.order === 3 ? '#c7d2fe' : '#7dd3fc');
+                badgeText.textContent = bond.type === 'covalent'
+                    ? (bond.order === 1 ? 'SINGLE' : bond.order === 2 ? 'DOUBLE 4e⁻' : 'TRIPLE 6e⁻')
+                    : 'IONIC';
+                group.appendChild(badgeText);
+
+                group.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeBond(bond.id);
+                });
+
+                bondLayer.appendChild(group);
+            });
+        }
+
+        function renderAtoms() {
+            atomLayer.innerHTML = '';
+
+            atoms.forEach(atom => {
+                const el = ELEMENT_MAP[atom.symbol];
+                const style = getCategoryStyle(el.category);
+                const charge = calculateIonicCharge(atom.id);
+                const chargeLabel = formatChargeBadge(charge);
+                const availCap = getAvailableCapacity(atom.id);
+                const isFull = availCap === 0;
+                const isCandidate = candidateTargetAtom && candidateTargetAtom.id === atom.id;
+                const atomBonds = getAtomBonds(atom.id);
+                const maxBondOrder = atomBonds.reduce((max, b) => Math.max(max, b.type === 'covalent' ? b.order : 0), 0);
+
+                const node = document.createElement('div');
+                node.style.left = `${atom.x}px`;
+                node.style.top = `${atom.y}px`;
+                node.className = `absolute -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-grab active:cursor-grabbing select-none group`;
+
+                // Outer Target Ring if another atom is dragged close
+                let ringHTML = '';
+                if (isCandidate) {
+                    ringHTML = `<div class="absolute -inset-2.5 rounded-full border-2 border-emerald-400 valid-target-ring pointer-events-none"></div>`;
+                }
+
+                // Hybridization / Multiple-Bond Indicator Pill on bottom of atom when participating in double/triple bonds
+                let bondBadgeHTML = '';
+                if (maxBondOrder >= 2) {
+                    const isTriple = maxBondOrder === 3;
+                    const pillStyle = isTriple
+                        ? 'bg-indigo-500 text-white border-indigo-200 shadow-indigo-500/40'
+                        : 'bg-sky-500 text-slate-950 border-sky-200 shadow-sky-500/40';
+                    const sharedTotal = atomBonds.filter(b => b.type === 'covalent').reduce((s, b) => s + b.order * 2, 0);
+                    bondBadgeHTML = `
+                        <div class="absolute -bottom-2.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-full ${pillStyle} border text-[9px] font-mono font-extrabold whitespace-nowrap shadow-md z-20">
+                            ${isTriple ? '≡ Triple' : '= Double'} (${sharedTotal}e⁻)
+                        </div>
+                    `;
+                }
+
+                // Ionic Charge Badge in the TOP-RIGHT corner of the ion
+                let chargeBadgeHTML = '';
+                if (chargeLabel) {
+                    const isPositive = charge > 0;
+                    const badgeColor = isPositive
+                        ? 'bg-amber-400 text-slate-950 border-amber-200 shadow-amber-500/40'
+                        : 'bg-sky-400 text-slate-950 border-sky-200 shadow-sky-500/40';
+                    chargeBadgeHTML = `
+                        <div class="absolute -top-2 -right-2 min-w-[24px] h-6 px-1.5 rounded-full ${badgeColor} border-2 font-mono font-extrabold text-xs flex items-center justify-center shadow-lg z-20 transition-transform scale-100">
+                            ${chargeLabel}
+                        </div>
+                    `;
+                }
+
+                // Valence Dots visualization (unshared lone-pair electrons positioned away from bond angles)
+                let dotsHTML = '';
+                if (showValenceDots) {
+                    const used = getUsedBondCapacity(atom.id);
+                    const remainingValence = charge > 0
+                        ? Math.max(0, el.valence - charge)
+                        : charge < 0
+                            ? Math.min(8, el.valence + Math.abs(charge))
+                            : Math.max(0, el.valence - used);
+
+                    dotsHTML = generateLonePairDotsSVG(atom, atomBonds, remainingValence);
+                }
+
+                // Outer ring highlights double/triple bonding or complete octet
+                const outerRingClass = maxBondOrder === 3
+                    ? 'ring-2 ring-indigo-400 shadow-indigo-500/30'
+                    : maxBondOrder === 2
+                        ? 'ring-2 ring-sky-400 shadow-sky-500/30'
+                        : isFull
+                            ? 'ring-2 ring-emerald-400/80'
+                            : 'ring-1 ring-white/20';
+
+                node.innerHTML = `
+                    ${ringHTML}
+                    ${dotsHTML}
+                    ${chargeBadgeHTML}
+                    ${bondBadgeHTML}
+                    <div class="w-16 h-16 rounded-full bg-gradient-to-br ${style.atomBg} p-0.5 shadow-xl ${outerRingClass} transition-transform group-hover:scale-105">
+                        <div class="w-full h-full rounded-full bg-slate-900/85 backdrop-blur-sm flex flex-col items-center justify-center relative">
+                            <span class="text-[9px] font-mono text-slate-400 leading-none">${el.z}</span>
+                            <span class="text-xl font-bold text-white leading-tight">${el.symbol}</span>
+                            <span class="text-[9px] font-mono ${isFull ? 'text-emerald-400' : 'text-slate-400'} leading-none">
+                                ${isFull ? (el.targetShell === 2 ? 'DUET ✓' : 'OCTET ✓') : `${availCap} free`}
+                            </span>
+                        </div>
+                    </div>
+                `;
+
+                // Drag Events
+                node.addEventListener('mousedown', (e) => startAtomDrag(e, atom));
+                node.addEventListener('touchstart', (e) => startAtomDrag(e, atom), { passive: false });
+
+                // Right-click to delete atom quickly
+                node.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    removeAtom(atom.id);
+                });
+
+                atomLayer.appendChild(node);
+            });
+        }
+
+        /**
+         * Renders remaining unbonded valence electrons (lone pairs) symmetrically
+         * on sides of the atom that are NOT occupied by active bonds.
+         */
+        function generateLonePairDotsSVG(atom, atomBonds, count) {
+            if (count <= 0) return '';
+
+            // Collect angles of existing bonds so lone pairs don't collide with bond lines
+            const bondAngles = atomBonds.map(b => {
+                const otherId = b.atomA === atom.id ? b.atomB : b.atomA;
+                const other = atoms.find(a => a.id === otherId);
+                if (!other) return 0;
+                return Math.atan2(other.y - atom.y, other.x - atom.x);
+            });
+
+            // 4 cardinal slots around the atom (Right, Bottom, Left, Top)
+            const slots = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+
+            // Sort slots by furthest angular distance from existing bonds
+            const rankedSlots = slots.slice().sort((a, b) => {
+                const minDistA = bondAngles.length === 0 ? Math.PI : Math.min(...bondAngles.map(ba => Math.abs(Math.atan2(Math.sin(a - ba), Math.cos(a - ba)))));
+                const minDistB = bondAngles.length === 0 ? Math.PI : Math.min(...bondAngles.map(ba => Math.abs(Math.atan2(Math.sin(b - ba), Math.cos(b - ba)))));
+                return minDistB - minDistA;
+            });
+
+            const cx0 = 38;
+            const cy0 = 38;
+            const radius = 34.5;
+            let circles = '';
+            let remaining = Math.min(count, 8);
+
+            for (let s = 0; s < rankedSlots.length && remaining > 0; s++) {
+                const angle = rankedSlots[s];
+                const tangentX = -Math.sin(angle);
+                const tangentY = Math.cos(angle);
+                const baseX = cx0 + Math.cos(angle) * radius;
+                const baseY = cy0 + Math.sin(angle) * radius;
+
+                if (remaining >= 2) {
+                    // Render a lone pair (2 closely spaced dots)
+                    [-3.6, 3.6].forEach(offset => {
+                        circles += `<circle cx="${(baseX + tangentX * offset).toFixed(1)}" cy="${(baseY + tangentY * offset).toFixed(1)}" r="2.5" fill="#fbbf24" stroke="#0f172a" stroke-width="0.6" />`;
+                    });
+                    remaining -= 2;
+                } else {
+                    // Render a single unpaired radical electron
+                    circles += `<circle cx="${baseX.toFixed(1)}" cy="${baseY.toFixed(1)}" r="2.5" fill="#fbbf24" stroke="#0f172a" stroke-width="0.6" />`;
+                    remaining -= 1;
+                }
+            }
+
+            return `<svg width="76" height="76" class="absolute -inset-[6px] pointer-events-none z-10">${circles}</svg>`;
+        }
+
+        /**
+         * ============================================================================
+         * 8. LIVE MOLECULE INSPECTOR & FORMULA GENERATOR
+         * ============================================================================
+         */
+        function updateInspector() {
+            const formulaEl = document.getElementById('formulaDisplay');
+            const nameEl = document.getElementById('moleculeNameDisplay');
+            const covEl = document.getElementById('covalentCount');
+            const ionEl = document.getElementById('ionicCount');
+            const badgeEl = document.getElementById('stabilityBadge');
+            const noteEl = document.getElementById('educationalNote');
+            const statusListEl = document.getElementById('atomStatusList');
+
+            const covBonds = bonds.filter(b => b.type === 'covalent').reduce((s, b) => s + b.order, 0);
+            const ionBonds = bonds.filter(b => b.type === 'ionic').reduce((s, b) => s + b.order, 0);
+            covEl.textContent = covBonds;
+            ionEl.textContent = ionBonds;
+
+            // Update VSEPR Card
+            const vseprNotationEl = document.getElementById('vseprNotation');
+            const vseprShapeEl = document.getElementById('vseprShapeName');
+            const vseprAngleEl = document.getElementById('vseprBondAngle');
+            const vseprDetailsEl = document.getElementById('vseprDetails');
+            const arrangeBtn = document.getElementById('arrangeVseprBtn');
+
+            if (activeVSEPRData && activeVSEPRData.centralAtom) {
+                const v = activeVSEPRData;
+                vseprNotationEl.textContent = v.notation;
+                vseprShapeEl.textContent = v.geometry;
+                vseprAngleEl.textContent = v.angleLabel;
+                vseprDetailsEl.textContent = `Central ${v.centralAtom.symbol}: ${v.bondingDomains} bonding domain${v.bondingDomains > 1 ? 's' : ''} + ${v.lonePairs} lone pair${v.lonePairs !== 1 ? 's' : ''} (${v.electronGeometry} electron geometry).`;
+                arrangeBtn.disabled = v.bondingDomains < 2;
+            } else {
+                vseprNotationEl.textContent = '—';
+                vseprShapeEl.textContent = 'No central atom';
+                vseprAngleEl.textContent = '—';
+                vseprDetailsEl.textContent = 'Connect 2+ atoms around a central atom to analyze electron domains & bond angles.';
+                arrangeBtn.disabled = true;
+            }
+
+            if (atoms.length === 0) {
+                formulaEl.innerHTML = '—';
+                nameEl.textContent = 'Place atoms to begin';
+                badgeEl.textContent = 'Empty';
+                badgeEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700';
+                noteEl.textContent = 'Drag atoms from the periodic palette onto the lab bench. Metals tend to lose valence electrons (+), while non-metals gain or share electrons to complete their octet (or duet for H).';
+                statusListEl.innerHTML = '<p class="text-slate-500 italic text-[11px]">No atoms on workbench.</p>';
+                return;
+            }
+
+            // Build Hill System / Ionic Chemical Formula
+            const counts = {};
+            atoms.forEach(a => {
+                counts[a.symbol] = (counts[a.symbol] || 0) + 1;
+            });
+
+            // Sort order: Metals first (by electronegativity), then C, H, then alphabetical
+            const sortedSymbols = Object.keys(counts).sort((a, b) => {
+                const elA = ELEMENT_MAP[a];
+                const elB = ELEMENT_MAP[b];
+                if (elA.role === 'metal' && elB.role !== 'metal') return -1;
+                if (elB.role === 'metal' && elA.role !== 'metal') return 1;
+                if (counts['C']) {
+                    if (a === 'C') return -1;
+                    if (b === 'C') return 1;
+                    if (a === 'H') return -1;
+                    if (b === 'H') return 1;
+                }
+                return elA.en - elB.en;
+            });
+
+            const plainFormula = sortedSymbols.map(sym => sym + (counts[sym] > 1 ? counts[sym] : '')).join('');
+            const formattedFormula = sortedSymbols.map(sym => sym + (counts[sym] > 1 ? `<sub>${counts[sym]}</sub>` : '')).join('');
+
+            formulaEl.innerHTML = formattedFormula;
+
+            // Check connected graph & octet satisfaction
+            const allFull = atoms.every(a => getAvailableCapacity(a.id) === 0);
+            const isConnected = checkAllAtomsConnected();
+
+            if (atoms.length > 1 && allFull && isConnected) {
+                badgeEl.textContent = 'Stable Molecule!';
+                badgeEl.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+            } else if (!isConnected && atoms.length > 1) {
+                badgeEl.textContent = 'Unbonded Atoms';
+                badgeEl.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40';
+            } else {
+                badgeEl.textContent = 'Incomplete Shell';
+                badgeEl.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40';
+            }
+
+            // Lookup known molecule name & explanation
+            const known = KNOWN_MOLECULES[plainFormula];
+            if (known && isConnected && allFull) {
+                nameEl.textContent = known.name;
+                noteEl.textContent = known.desc;
+            } else {
+                nameEl.textContent = atoms.length === 1 ? `${ELEMENT_MAP[atoms[0].symbol].name} Atom` : 'Custom Molecular Assembly';
+                if (ionBonds > 0 && covBonds === 0) {
+                    noteEl.textContent = 'Ionic compound forming: electrons transfer from the metal (cation +) to the non-metal (anion −). Dashed lines represent electrostatic attraction.';
+                } else if (covBonds > 0 && ionBonds === 0) {
+                    noteEl.textContent = 'Covalent molecule forming: non-metal atoms share electron pairs (solid dashes) so each atom reaches a stable duet (2e⁻) or octet (8e⁻).';
+                } else if (ionBonds > 0 && covBonds > 0) {
+                    noteEl.textContent = 'Polyatomic ionic assembly: contains both shared covalent electron pairs and transferred ionic charges.';
+                } else {
+                    noteEl.textContent = 'Drag atoms close together to form bonds and satisfy their remaining valence capacities.';
+                }
+            }
+
+            // Render per-atom valence checklist
+            statusListEl.innerHTML = atoms.map(a => {
+                const el = ELEMENT_MAP[a.symbol];
+                const avail = getAvailableCapacity(a.id);
+                const charge = formatChargeBadge(calculateIonicCharge(a.id));
+                const done = avail === 0;
+                return `
+                    <div class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold text-white">${el.symbol}${charge ? `<sup class="text-amber-300 ml-0.5">${charge}</sup>` : ''}</span>
+                            <span class="text-slate-400 text-[11px]">${el.name}</span>
+                        </div>
+                        <span class="font-mono text-[10px] px-1.5 py-0.5 rounded ${done ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'}">
+                            ${done ? '✓ Octet/Duet' : `Needs ${avail} bond${avail > 1 ? 's' : ''}`}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function checkAllAtomsConnected() {
+            if (atoms.length <= 1) return true;
+            const visited = new Set([atoms[0].id]);
+            const queue = [atoms[0].id];
+            while (queue.length > 0) {
+                const curr = queue.shift();
+                bonds.forEach(b => {
+                    const next = b.atomA === curr ? b.atomB : (b.atomB === curr ? b.atomA : null);
+                    if (next && !visited.has(next)) {
+                        visited.add(next);
+                        queue.push(next);
+                    }
+                });
+            }
+            return visited.size === atoms.length;
+        }
+
+        /**
+         * ============================================================================
+         * 9. PRESET MOLECULE LOADER & TOAST FEEDBACK
+         * ============================================================================
+         */
+        function loadPreset(presetKey) {
+            clearWorkspace(false);
+            historyStack = [];
+            updateUndoButton();
+            const rect = canvasContainer.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+
+            if (presetKey === 'H2O') {
+                const o = addAtom('O', cx, cy - 20, false);
+                const h1 = addAtom('H', cx - 95, cy + 55, false);
+                const h2 = addAtom('H', cx + 95, cy + 55, false);
+                tryCreateOrUpgradeBond(o.id, h1.id);
+                tryCreateOrUpgradeBond(o.id, h2.id);
+            } else if (presetKey === 'NaCl') {
+                const na = addAtom('Na', cx - 75, cy, false);
+                const cl = addAtom('Cl', cx + 75, cy, false);
+                tryCreateOrUpgradeBond(na.id, cl.id);
+            } else if (presetKey === 'O2') {
+                const o1 = addAtom('O', cx - 80, cy, false);
+                const o2 = addAtom('O', cx + 80, cy, false);
+                tryCreateOrUpgradeBond(o1.id, o2.id); // Automatically forms Double Bond
+            } else if (presetKey === 'N2') {
+                const n1 = addAtom('N', cx - 80, cy, false);
+                const n2 = addAtom('N', cx + 80, cy, false);
+                tryCreateOrUpgradeBond(n1.id, n2.id); // Automatically forms Triple Bond
+            } else if (presetKey === 'CO2') {
+                const c = addAtom('C', cx, cy, false);
+                const o1 = addAtom('O', cx - 125, cy, false);
+                const o2 = addAtom('O', cx + 125, cy, false);
+                tryCreateOrUpgradeBond(c.id, o1.id); // Automatically forms Double Bond
+                tryCreateOrUpgradeBond(c.id, o2.id); // Automatically forms Double Bond
+            } else if (presetKey === 'HCN') {
+                const h = addAtom('H', cx - 135, cy, false);
+                const c = addAtom('C', cx - 25, cy, false);
+                const n = addAtom('N', cx + 105, cy, false);
+                tryCreateOrUpgradeBond(h.id, c.id); // Single Bond
+                tryCreateOrUpgradeBond(c.id, n.id); // Automatically forms Triple Bond
+            } else if (presetKey === 'C2H2') {
+                const h1 = addAtom('H', cx - 165, cy, false);
+                const c1 = addAtom('C', cx - 60, cy, false);
+                const c2 = addAtom('C', cx + 60, cy, false);
+                const h2 = addAtom('H', cx + 165, cy, false);
+                tryCreateOrUpgradeBond(c1.id, c2.id); // Automatically forms Triple Bond
+                tryCreateOrUpgradeBond(h1.id, c1.id); // Single Bond
+                tryCreateOrUpgradeBond(c2.id, h2.id); // Single Bond
+            } else if (presetKey === 'CH4') {
+                const c = addAtom('C', cx, cy, false);
+                const h1 = addAtom('H', cx, cy - 110, false);
+                const h2 = addAtom('H', cx, cy + 110, false);
+                const h3 = addAtom('H', cx - 110, cy, false);
+                const h4 = addAtom('H', cx + 110, cy, false);
+                tryCreateOrUpgradeBond(c.id, h1.id);
+                tryCreateOrUpgradeBond(c.id, h2.id);
+                tryCreateOrUpgradeBond(c.id, h3.id);
+                tryCreateOrUpgradeBond(c.id, h4.id);
+            } else if (presetKey === 'MgO') {
+                const mg = addAtom('Mg', cx - 75, cy, false);
+                const o = addAtom('O', cx + 75, cy, false);
+                tryCreateOrUpgradeBond(mg.id, o.id);
+                tryCreateOrUpgradeBond(mg.id, o.id); // 2+ and 2- transfer
+            } else if (presetKey === 'NH3') {
+                const n = addAtom('N', cx, cy - 20, false);
+                const h1 = addAtom('H', cx - 100, cy + 50, false);
+                const h2 = addAtom('H', cx, cy + 95, false);
+                const h3 = addAtom('H', cx + 100, cy + 50, false);
+                tryCreateOrUpgradeBond(n.id, h1.id);
+                tryCreateOrUpgradeBond(n.id, h2.id);
+                tryCreateOrUpgradeBond(n.id, h3.id);
+            } else if (presetKey === 'CaCl2') {
+                const ca = addAtom('Ca', cx, cy, false);
+                const cl1 = addAtom('Cl', cx - 125, cy, false);
+                const cl2 = addAtom('Cl', cx + 125, cy, false);
+                tryCreateOrUpgradeBond(ca.id, cl1.id);
+                tryCreateOrUpgradeBond(ca.id, cl2.id);
+            }
+            historyStack = [];
+            updateUndoButton();
+        }
+
+        let toastTimeout = null;
+        function showToast(message, type = 'neutral') {
+            const banner = document.getElementById('toastBanner');
+            const text = document.getElementById('toastText');
+            const dot = document.getElementById('toastDot');
+
+            text.textContent = message;
+            dot.className = 'w-2 h-2 rounded-full ' + (
+                type === 'covalent' ? 'bg-sky-400' :
+                type === 'ionic' ? 'bg-amber-400' :
+                type === 'error' ? 'bg-rose-500' : 'bg-slate-400'
+            );
+
+            banner.classList.remove('opacity-0', '-translate-y-2');
+            banner.classList.add('opacity-100', 'translate-y-0');
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                banner.classList.remove('opacity-100', 'translate-y-0');
+                banner.classList.add('opacity-0', '-translate-y-2');
+            }, 2600);
+        }
+
+        // Handle window resize gracefully
+        window.addEventListener('resize', () => {
+            atoms.forEach(clampAtomPosition);
+            renderAll();
+        });
+
+        // Boot up
+        initPalette();
+        renderAll();
+    </script>
+</body>
+</html>
